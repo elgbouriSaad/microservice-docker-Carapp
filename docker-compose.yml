@@ -1,0 +1,88 @@
+services:
+  mysql:
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_PASSWORD:
+      #MYSQL_DATABASE: clientservicedb,carservicedb
+    ports:
+      - "3306:3306"
+  controle-service:
+    container_name: controle-service
+    build: ./controle
+    ports:
+      - "8761:8761"
+    expose:
+      - "8761"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      retries: 3
+  controle-client-service:
+    container_name: controle-client-service
+    build: ./controleClient
+    ports:
+      - "8081:8081"
+    expose:
+      - "8081"
+
+    depends_on:
+      controle-service:
+        condition: service_healthy
+      mysql:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/clientservicedb?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD:
+      DISCOVERY_SERVICE_URL: http://controle-service:8761/eureka/
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      retries: 3
+
+  car-service:
+    container_name: car-service
+    build: ./Car
+    ports:
+      - "8082:8082"
+    expose:
+      - "8082"
+
+    depends_on:
+      controle-service:
+        condition: service_healthy
+      mysql:
+        condition: service_started
+      controle-client-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/carservicedb?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD:
+      DISCOVERY_SERVICE_URL: http://controle-service:8761/eureka/
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      retries: 3
+
+  gateway-service:
+    container_name: gateway-service
+    build: ./gateway
+    ports:
+      - "8888:8888"
+    expose:
+      - "8888"
+    depends_on:
+      controle-service:
+        condition: service_healthy
+    environment:
+      DISCOVERY_SERVICE_URL: http://controle-service:8761/eureka/
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD:
+    ports:
+      - "8090:80"
